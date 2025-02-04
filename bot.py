@@ -1,5 +1,5 @@
 from telegram import Update, ChatPermissions
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ChatMemberHandler
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo  # برای مناطق زمانی
 import asyncio  # برای استفاده از sleep
@@ -72,7 +72,8 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
     violation_messages = {
         "time": f"{update.effective_user.mention_html()} ⏳ ارسال پیام فقط از ساعت 9 صبح تا 9 شب (به وقت تورنتو) مجاز است.",
         "message_limit": f"{update.effective_user.mention_html()} 🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!",
-        "muted": f"{update.effective_user.mention_html()} 🚫 به دلیل رعایت نکردن قوانین، شما تا {int(MUTE_DURATION.total_seconds() // 3600)} ساعت آینده نمی‌توانید پیام ارسال کنید."
+        "muted": f"{update.effective_user.mention_html()} 🚫 به دلیل رعایت نکردن قوانین، شما تا {int(MUTE_DURATION.total_seconds() // 3600)} ساعت آینده نمی‌توانید پیام ارسال کنید.",
+        "add_bot": f"{update.effective_user.mention_html()} 🚫 فقط ادمین‌ها می‌توانند ربات اضافه کنند."
     }
 
     # بررسی اینکه آخرین پیام خطا چه زمانی ارسال شده
@@ -195,15 +196,10 @@ async def lift_restriction(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ خطا در لغو محدودیت کاربر: {e}")
 
-def main():
-    app = Application.builder().token(TOKEN).build()
+# تابع برای بررسی اضافه شدن اعضای جدید و حذف ربات‌ها توسط کاربران غیر ادمین
+async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    new_members = update.message.new_chat_members
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("unmute", lift_restriction))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
-
-    print("✅ ربات در حال اجرا است...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+    for member in new_members:
+        if member.is_bot:  # بررسی اینکه آیا عضو جدید یک ر
