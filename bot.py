@@ -15,7 +15,7 @@ user_last_message = {}
 user_violations = {}
 user_last_error = {}
 
-MAX_VIOLATIONS = 3  # حداکثر تعداد نقض مجاز
+MAX_VIOLATIONS = 6  # حداکثر تعداد نقض مجاز
 MUTE_DURATION = timedelta(hours=1)  # مدت زمان بی‌صدا کردن کاربر
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
