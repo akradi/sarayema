@@ -4,6 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo  # برای مناطق زمانی
 import asyncio  # برای استفاده از sleep
 
+# توکن ربات خود را در اینجا قرار دهید
 TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
 user_last_message = {}
@@ -31,6 +32,9 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # فقط بین 9 صبح تا 9 شب پیام مجاز است (به وقت تورنتو)
     if not (9 <= current_hour < 21):
+        # حذف پیام کاربر
+        await update.message.delete()
+        # ارسال پیام خطا
         error_message = await update.message.reply_text(
             f"{update.message.from_user.mention_html()} ⏳ ارسال پیام فقط از ساعت 9 صبح تا 9 شب (به وقت تورنتو) مجاز است.",
             parse_mode="HTML"
@@ -42,6 +46,9 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # بررسی ارسال یک پیام در روز
     if user_id in user_last_message and user_last_message[user_id] == today:
+        # حذف پیام کاربر
+        await update.message.delete()
+        # ارسال پیام خطا
         error_message = await update.message.reply_text(
             f"{update.message.from_user.mention_html()} 🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!",
             parse_mode="HTML"
