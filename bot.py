@@ -1,13 +1,20 @@
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from datetime import datetime
+import logging
 
+# توکن ربات خود را در اینجا قرار دهید
 TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
 user_last_message = {}
 
+# فعال‌سازی لاگ برای دیباگ راحت‌تر
+logging.basicConfig(level=logging.INFO)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("سلام! من مدیر گروه هستم 😎\nلطفاً برای دریافت پیام‌های خصوصی، یک گفتگوی خصوصی با من شروع کنید.")
+    await update.message.reply_text(
+        "سلام! من مدیر گروه هستم 😎\nلطفاً برای دریافت پیام‌های خصوصی، یک گفتگوی خصوصی با من شروع کنید."
+    )
 
 async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat.id
@@ -28,12 +35,15 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_message(
                 chat_id=user_id,
-                text="⏳ ارسال پیام فقط از ساعت 9 صبح تا 9 شب مجاز است."
+                text="⏳ ارسال پیام فقط از ساعت 9 صبح تا 9 شب مجاز است.",
+                parse_mode="HTML"
             )
-        except:
+        except Exception as e:
+            logging.error(f"خطا در ارسال پیام خصوصی به کاربر {user_id}: {e}")
             # ارسال پیام در گروه به عنوان آخرین راهکار
             await update.message.reply_text(
-                f"{update.message.from_user.first_name}، ⏳ ارسال پیام فقط از ساعت 9 صبح تا 9 شب مجاز است."
+                f"{update.message.from_user.mention_html()} ⏳ ارسال پیام فقط از ساعت 9 صبح تا 9 شب مجاز است.",
+                parse_mode="HTML"
             )
         return
 
@@ -44,12 +54,15 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             await context.bot.send_message(
                 chat_id=user_id,
-                text="🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!"
+                text="🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!",
+                parse_mode="HTML"
             )
-        except:
+        except Exception as e:
+            logging.error(f"خطا در ارسال پیام خصوصی به کاربر {user_id}: {e}")
             # ارسال پیام در گروه به عنوان آخرین راهکار
             await update.message.reply_text(
-                f"{update.message.from_user.first_name}، 🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!"
+                f"{update.message.from_user.mention_html()} 🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!",
+                parse_mode="HTML"
             )
         return
 
