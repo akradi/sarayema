@@ -6,7 +6,7 @@ import asyncio
 import logging
 
 # توکن ربات خود را در اینجا قرار دهید
-TOKEN = "توکن_ربات_شما"
+TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
 user_last_message = {}
 
