@@ -1,5 +1,5 @@
 from telegram import Update, ChatPermissions
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ChatMemberHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo  # برای مناطق زمانی
 import asyncio  # برای استفاده از sleep
@@ -205,11 +205,33 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if member.is_bot:
             adder_id = update.message.from_user.id
 
-            # بررسی اینکه کاربر اضافه کننده ادمین است یا نه
+            # بررسی اینکه کاربر اضافه‌کننده ادمین است یا نه
             try:
                 adder_status = await context.bot.get_chat_member(chat_id, adder_id)
                 if adder_status.status not in ['creator', 'administrator']:
                     # حذف ربات جدید
                     try:
                         await context.bot.ban_chat_member(chat_id, member.id)
-                        await context.bot.unban
+                        await context.bot.unban_chat_member(chat_id, member.id)
+
+                        # ارسال پیام خطا به کاربر
+                        violation_type = "add_bot"
+                        await handle_violation(update, context, violation_type)
+                    except Exception as e:
+                        logging.error(f"خطا در حذف ربات اضافه‌شده: {e}")
+            except Exception as e:
+                logging.error(f"خطا در بررسی وضعیت اضافه‌کننده: {e}")
+
+def main():
+    app = Application.builder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("unmute", lift_restriction))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, restrict_messages))
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
+
+    print("✅ ربات در حال اجرا است...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
