@@ -1,5 +1,5 @@
 from telegram import Update, ChatPermissions
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ChatMemberHandler
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo  # برای مناطق زمانی
 import asyncio  # برای استفاده از sleep
@@ -211,4 +211,5 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 if adder_status.status not in ['creator', 'administrator']:
                     # حذف ربات جدید
                     try:
-                        await context.bot.ban_chat_member(chat
+                        await context.bot.ban_chat_member(chat_id, member.id)
+                        await context.bot.unban_chat_member(chat_id
