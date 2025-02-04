@@ -30,13 +30,14 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_hour = current_time.hour
     today = current_time.date()
 
-    # فقط بین 9 صبح تا 9 شب پیام مجاز است (به وقت تورنتو)
+    # حذف پیام‌های خارج از ساعت مجاز
     if not (9 <= current_hour < 21):
         # حذف پیام کاربر
         await update.message.delete()
-        # ارسال پیام خطا
-        error_message = await update.message.reply_text(
-            f"{update.message.from_user.mention_html()} ⏳ ارسال پیام فقط از ساعت 9 صبح تا 9 شب (به وقت تورنتو) مجاز است.",
+        # ارسال پیام خطا به صورت پیام جدید
+        error_message = await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"{update.message.from_user.mention_html()} ⏳ ارسال پیام فقط از ساعت 9 صبح تا 9 شب (به وقت تورنتو) مجاز است.",
             parse_mode="HTML"
         )
         # حذف پیام خطا بعد از 10 ثانیه
@@ -48,9 +49,10 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in user_last_message and user_last_message[user_id] == today:
         # حذف پیام کاربر
         await update.message.delete()
-        # ارسال پیام خطا
-        error_message = await update.message.reply_text(
-            f"{update.message.from_user.mention_html()} 🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!",
+        # ارسال پیام خطا به صورت پیام جدید
+        error_message = await context.bot.send_message(
+            chat_id=chat_id,
+            text=f"{update.message.from_user.mention_html()} 🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!",
             parse_mode="HTML"
         )
         # حذف پیام خطا بعد از 10 ثانیه
@@ -62,10 +64,10 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     app = Application.builder().token(TOKEN).build()
-    
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, restrict_messages))
-    
+
     print("✅ ربات در حال اجرا است...")
     app.run_polling()
 
