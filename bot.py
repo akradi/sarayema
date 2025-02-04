@@ -1,7 +1,7 @@
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from datetime import datetime
 
-TOKEN = "توکن_ربات_را_اینجا_بگذار"
+TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
 user_last_message = {}
 
