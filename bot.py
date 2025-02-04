@@ -212,4 +212,4 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     # حذف ربات جدید
                     try:
                         await context.bot.ban_chat_member(chat_id, member.id)
-                        await context.bot.unban_chat_member(chat_id
+                        await context.bot.unban
