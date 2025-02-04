@@ -202,4 +202,13 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
     new_members = update.message.new_chat_members
 
     for member in new_members:
-        if member.is_bot:  # بررسی اینکه آیا عضو جدید یک ر
+        if member.is_bot:
+            adder_id = update.message.from_user.id
+
+            # بررسی اینکه کاربر اضافه کننده ادمین است یا نه
+            adder_status = await context.bot.get_chat_member(chat_id, adder_id)
+            if adder_status.status not in ['creator', 'administrator']:
+                # حذف ربات جدید
+                try:
+                    await context.bot.ban_chat_member(chat_id, member.id)
+                    await context.bot.unban_chat_member
