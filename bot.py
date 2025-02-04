@@ -8,14 +8,15 @@ import logging
 # تنظیم لاگ‌ها برای دیباگ بهتر
 logging.basicConfig(level=logging.INFO)
 
-# توکن ربات خود را در اینجا قرار دهید
-TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
+# 🔒 توکن ربات خود را در اینجا قرار دهید
+TOKEN = "YOUR_BOT_TOKEN"
 
 user_last_message = {}
 user_violations = {}
 user_last_error = {}
+muted_users = {}
 
-MAX_VIOLATIONS = 6  # حداکثر تعداد نقض مجاز
+MAX_VIOLATIONS = 3  # حداکثر تعداد نقض مجاز
 MUTE_DURATION = timedelta(hours=1)  # مدت زمان بی‌صدا کردن کاربر
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -115,6 +116,9 @@ async def register_violation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 permissions=ChatPermissions(can_send_messages=False),
                 until_date=until_date
             )
+            # ذخیره اطلاعات کاربر بی‌صدا شده
+            muted_users[user_id] = until_date
+
             # ارسال پیام اطلاع‌رسانی به کاربر (سایلنت)
             try:
                 mute_message = await context.bot.send_message(
@@ -141,10 +145,57 @@ async def delete_message_after_delay(message, delay):
     except Exception as e:
         logging.error(f"خطا در حذف پیام پس از تأخیر: {e}")
 
+# افزودن تابع لغو محدودیت
+async def lift_restriction(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+
+    # بررسی اینکه کاربر استفاده‌کننده ادمین است یا نه
+    user_status = await context.bot.get_chat_member(chat_id, update.effective_user.id)
+    if user_status.status not in ['creator', 'administrator']:
+        await update.message.reply_text("🚫 شما مجوز لازم برای لغو محدودیت کاربران را ندارید.")
+        return
+
+    # دریافت شناسه کاربری که قرار است محدودیتش لغو شود
+    if update.message.reply_to_message:
+        user_id = update.message.reply_to_message.from_user.id
+    elif context.args:
+        try:
+            user_id = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("❗ شناسه کاربر نامعتبر است.")
+            return
+    else:
+        await update.message.reply_text("❗ لطفاً به پیام کاربر ریپلای کنید یا شناسه عددی کاربر را وارد کنید.")
+        return
+
+    try:
+        # لغو محدودیت کاربر
+        await context.bot.restrict_chat_member(
+            chat_id=chat_id,
+            user_id=user_id,
+            permissions=ChatPermissions(
+                can_send_messages=True,
+                can_send_media_messages=True,
+                can_send_polls=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True,
+                can_invite_users=True,
+                can_pin_messages=False,
+                can_change_info=False
+            )
+        )
+        # حذف کاربر از لیست بی‌صدا شده‌ها
+        if user_id in muted_users:
+            del muted_users[user_id]
+        await update.message.reply_text(f"✅ محدودیت کاربر برداشته شد.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطا در لغو محدودیت کاربر: {e}")
+
 def main():
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("unmute", lift_restriction))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
 
     print("✅ ربات در حال اجرا است...")
