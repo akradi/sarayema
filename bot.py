@@ -1,16 +1,14 @@
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo  # اضافه کردن zoneinfo برای مناطق زمانی
-import asyncio
+from datetime import datetime
+from zoneinfo import ZoneInfo  # برای مناطق زمانی
+import asyncio  # برای استفاده از sleep
 import logging
 
 # توکن ربات خود را در اینجا قرار دهید
 TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
 user_last_message = {}
-
-# فعال‌سازی لاگ برای دیباگ راحت‌تر
 logging.basicConfig(level=logging.INFO)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -22,7 +20,7 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat.id
     user_id = update.message.from_user.id
 
-    # گرفتن زمان فعلی بر اساس منطقه زمانی تورنتو
+    # زمان فعلی بر اساس منطقه زمانی تورنتو
     toronto_tz = ZoneInfo('America/Toronto')
     current_dt = datetime.now(toronto_tz)
     current_hour = current_dt.hour
@@ -30,7 +28,7 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # گرفتن وضعیت کاربر در گروه
     chat_member = await context.bot.get_chat_member(chat_id, user_id)
-    user_status = chat_member.status  # می‌تواند 'creator', 'administrator', 'member' و غیره باشد.
+    user_status = chat_member.status
 
     # اگر کاربر مالک یا ادمین است، محدودیت‌ها اعمال نشود
     if user_status in ['creator', 'administrator']:
@@ -64,10 +62,10 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     app = Application.builder().token(TOKEN).build()
-    
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, restrict_messages))
-    
+
     print("✅ ربات در حال اجرا است...")
     app.run_polling()
 
