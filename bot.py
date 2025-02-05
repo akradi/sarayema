@@ -195,4 +195,40 @@ async def lift_restriction(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         if user_id in muted_users:
             del muted_users[user_id]
-        await update.message.reply_text(f"✅ محدو
+        await update.message.reply_text("✅ محدودیت کاربر برداشته شد.")
+    except Exception as e:
+        await update.message.reply_text(f"❌ خطا در لغو محدودیت کاربر: {e}")
+
+# تابع برای جلوگیری از اضافه کردن ربات توسط کاربران غیر ادمین
+async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    new_members = update.message.new_chat_members
+    for member in new_members:
+        if member.is_bot:
+            adder_id = update.message.from_user.id
+            try:
+                adder_status = await context.bot.get_chat_member(chat_id, adder_id)
+                if adder_status.status not in ['creator', 'administrator']:
+                    try:
+                        await context.bot.ban_chat_member(chat_id, member.id)
+                        await context.bot.unban_chat_member(chat_id, member.id)
+                        violation_type = "add_bot"
+                        await handle_violation(update, context, violation_type)
+                    except Exception as e:
+                        logging.error(f"خطا در حذف ربات اضافه‌شده: {e}")
+            except Exception as e:
+                logging.error(f"خطا در بررسی وضعیت اضافه‌کننده: {e}")
+
+def main():
+    app = Application.builder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("unmute", lift_restriction))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, restrict_messages))
+    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
+
+    print("✅ ربات در حال اجرا است...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
