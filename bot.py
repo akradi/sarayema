@@ -77,9 +77,9 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
     chat_id = update.effective_chat.id
 
     violation_messages = {
-        "time": f"{update.effective_user.mention_html()} ⏳ ارسال پیام فقط از ساعت 9 صبح تا 9 شب (به وقت تورنتو) مجاز است.",
+        "time": f"{update.effective_user.mention_html()} ⏳ کاربر گرامی، ارسال پیام در این گروه فقط از ساعت ۹ صبح تا ۹ شب (به وقت تورنتو) مجاز است.",
         "message_limit": f"{update.effective_user.mention_html()} 🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!",
-        "muted": f"{update.effective_user.mention_html()} 🚫 به دلیل رعایت نکردن قوانین، شما تا {int(MUTE_DURATION.total_seconds() // 3600)} ساعت آینده نمی‌توانید پیام ارسال کنید.",
+        "muted": f"{update.effective_user.mention_html()} 🚫 به دلیل رعایت نکردن قوانین، شما تا  {int(MUTE_DURATION.total_seconds() // 3600)} ساعت آینده نمی‌توانید پیام ارسال کنید .",
         "add_bot": f"{update.effective_user.mention_html()} 🚫 فقط ادمین‌ها می‌توانند ربات اضافه کنند."
     }
 
