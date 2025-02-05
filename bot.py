@@ -1,7 +1,7 @@
 from telegram import Update, ChatPermissions
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo  # برای مناطق زمانی
+from zoneinfo import ZoneInfo  # برای تنظیم منطقه زمانی
 import asyncio
 import logging
 
@@ -12,13 +12,13 @@ logging.basicConfig(level=logging.INFO)
 TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
 # دیکشنری‌ها برای پیگیری پیام‌ها و نقض قوانین کاربر
-user_last_message = {}
-user_violations = {}
-user_last_error = {}
-muted_users = {}
+user_last_message = {}    # ذخیره تاریخ آخرین پیام هر کاربر
+user_violations = {}      # شمارش تعداد نقض‌های کاربر
+user_last_error = {}      # ذخیره زمان آخرین پیام خطا برای جلوگیری از اسپم
+muted_users = {}          # ذخیره اطلاعات کاربران بی‌صدا شده
 
-MAX_VIOLATIONS = 3  # حداکثر تعداد نقض مجاز
-MUTE_DURATION = timedelta(hours=1)  # مدت زمان بی‌صدا کردن کاربر
+MAX_VIOLATIONS = 3       # حداکثر تعداد نقض مجاز قبل از بی‌صدا شدن
+MUTE_DURATION = timedelta(hours=1)  # مدت زمان بی‌صدا شدن (یک ساعت)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("سلام! من مدیر گروه هستم 😎")
@@ -27,7 +27,7 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
 
-    # بررسی وضعیت کاربر در گروه
+    # بررسی وضعیت کاربر در گروه (ادمین یا مالک نباشد)
     try:
         chat_member = await context.bot.get_chat_member(chat_id, user_id)
         user_status = chat_member.status
@@ -35,11 +35,10 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"خطا در دریافت وضعیت کاربر: {e}")
         return
 
-    # اگر کاربر مالک یا ادمین است، محدودیت اعمال نمی‌شود
     if user_status in ['creator', 'administrator']:
         return
 
-    # بررسی اینکه پیام فوروارد شده باشد (در صورت وجود)
+    # بررسی پیام‌های فوروارد شده
     if update.message.forward_date is not None:
         try:
             await update.message.delete()
@@ -48,33 +47,33 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_violation(update, context, violation_type="forward")
         return
 
-    # استفاده از زمان ارسال پیام به عنوان مرجع و تبدیل آن به منطقه زمانی تورنتو
+    # استفاده از زمان فعلی سرور (به وقت تورنتو)
     toronto_tz = ZoneInfo('America/Toronto')
-    message_time = update.message.date.astimezone(toronto_tz)
-    current_hour = message_time.hour
-    today = message_time.date()
+    current_time = datetime.now(toronto_tz)
+    current_hour = current_time.hour
+    today = current_time.date()
 
-    # بررسی محدودیت زمانی (فقط بین ساعت ۹ صبح تا ۹ شب مجاز)
+    # بررسی محدودیت زمانی: فقط بین ساعت 9 صبح تا 9 شب مجاز است
     if not (9 <= current_hour < 21):
         try:
             await update.message.delete()
         except Exception as e:
-            logging.error(f"خطا در حذف پیام کاربر: {e}")
+            logging.error(f"خطا در حذف پیام خارج از بازه زمانی مجاز: {e}")
         await handle_violation(update, context, violation_type="time")
         return
 
-    # بررسی ارسال بیش از یک پیام در روز
+    # بررسی اینکه کاربر فقط یک پیام در روز ارسال کند
     if user_id in user_last_message and user_last_message[user_id] == today:
         try:
             await update.message.delete()
         except Exception as e:
-            logging.error(f"خطا در حذف پیام کاربر: {e}")
+            logging.error(f"خطا در حذف پیام برای محدودیت یک پیام در روز: {e}")
         await handle_violation(update, context, violation_type="message_limit")
         return
 
-    # ذخیره زمان آخرین پیام کاربر
+    # اگر همه موارد مجاز باشد، تاریخ ارسال پیام را ثبت می‌کنیم
     user_last_message[user_id] = today
-    # ریست کردن تعداد نقض‌های کاربر در صورت ارسال پیام مجاز
+    # ریست نقض‌ها (در صورت ارسال پیام مجاز)
     user_violations[user_id] = 0
     user_last_error[user_id] = None
 
@@ -90,9 +89,10 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
         "forward": f"{update.effective_user.mention_html()} 🚫 ارسال فوروارد مجاز نیست!"
     }
 
-    # بررسی زمان آخرین پیام خطا برای جلوگیری از ارسال مکرر
+    # بررسی زمان آخرین پیام خطا برای جلوگیری از ارسال مکرر پیام‌های خطا
     last_error_time = user_last_error.get(user_id)
     time_since_last_error = (datetime.now() - last_error_time).total_seconds() if last_error_time else None
+
     if not last_error_time or time_since_last_error > 30:
         try:
             error_message = await context.bot.send_message(
@@ -106,7 +106,6 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
         except Exception as e:
             logging.error(f"خطا در ارسال پیام خطا: {e}")
 
-        # به‌روزرسانی زمان آخرین پیام خطا
         user_last_error[user_id] = datetime.now()
         # ثبت نقض کاربر
         await register_violation(update, context)
@@ -119,7 +118,6 @@ async def register_violation(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_violations[user_id] = user_violations.get(user_id, 0) + 1
 
     if user_violations[user_id] >= MAX_VIOLATIONS:
-        # بی‌صدا کردن کاربر به مدت تعیین‌شده
         until_date = datetime.now() + MUTE_DURATION
         try:
             await context.bot.restrict_chat_member(
@@ -157,13 +155,13 @@ async def delete_message_after_delay(message, delay):
 async def lift_restriction(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
-    # بررسی اینکه کاربر استفاده‌کننده ادمین است یا نه
+    # بررسی مجوز کاربر (فقط ادمین یا مالک می‌توانند لغو کنند)
     user_status = await context.bot.get_chat_member(chat_id, update.effective_user.id)
     if user_status.status not in ['creator', 'administrator']:
         await update.message.reply_text("🚫 شما مجوز لازم برای لغو محدودیت کاربران را ندارید.")
         return
 
-    # دریافت شناسه کاربری که قرار است محدودیتش لغو شود
+    # دریافت شناسه کاربری که قصد لغو محدودیتش را داریم
     if update.message.reply_to_message:
         user_id = update.message.reply_to_message.from_user.id
     elif context.args:
@@ -177,7 +175,6 @@ async def lift_restriction(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # تنظیم مجوزها
         permissions = ChatPermissions(
             can_send_messages=True,
             can_send_polls=True,
@@ -187,7 +184,6 @@ async def lift_restriction(update: Update, context: ContextTypes.DEFAULT_TYPE):
             can_change_info=False,
             can_pin_messages=False
         )
-        # لغو محدودیت کاربر
         await context.bot.restrict_chat_member(
             chat_id=chat_id,
             user_id=user_id,
@@ -212,8 +208,7 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     try:
                         await context.bot.ban_chat_member(chat_id, member.id)
                         await context.bot.unban_chat_member(chat_id, member.id)
-                        violation_type = "add_bot"
-                        await handle_violation(update, context, violation_type)
+                        await handle_violation(update, context, violation_type="add_bot")
                     except Exception as e:
                         logging.error(f"خطا در حذف ربات اضافه‌شده: {e}")
             except Exception as e:
