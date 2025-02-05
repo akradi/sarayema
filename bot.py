@@ -1,7 +1,7 @@
 from telegram import Update, ChatPermissions
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo  # برای مناطق زمانی
+from zoneinfo import ZoneInfo
 import asyncio
 import logging
 
@@ -36,6 +36,11 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # اگر کاربر مالک یا ادمین است، محدودیت‌ها اعمال نشود
     if user_status in ['creator', 'administrator']:
+        return
+
+    # بررسی اینکه پیام فوروارد شده است یا خیر
+    if update.message.forward_date:
+        await handle_violation(update, context, violation_type="forward")
         return
 
     # زمان فعلی بر اساس منطقه زمانی تورنتو
@@ -79,8 +84,9 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
     violation_messages = {
         "time": f"{update.effective_user.mention_html()} عزیز \n⏳ ارسال پیام در این گروه فقط از ساعت ۹ صبح تا ۹ شب به وقت تورنتو مجاز است.",
         "message_limit": f"{update.effective_user.mention_html()} 🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!",
-        "muted": f"{update.effective_user.mention_html()} 🚫 به دلیل رعایت نکردن قوانین، شما تا\n  {int(MUTE_DURATION.total_seconds() // 3600)} ساعت آینده\n نمی‌توانید پیام ارسال کنید .",
-        "add_bot": f"{update.effective_user.mention_html()} 🚫 فقط ادمین‌ها می‌توانند ربات اضافه کنند."
+        "muted": f"{update.effective_user.mention_html()} 🚫 به دلیل رعایت نکردن قوانین، شما تا\n  {int(MUTE_DURATION.total_seconds() // 3600)} ساعت آینده\n نمی‌توانید پیام ارسال کنید.",
+        "add_bot": f"{update.effective_user.mention_html()} 🚫 فقط ادمین‌ها می‌توانند ربات اضافه کنند.",
+        "forward": f"{update.effective_user.mention_html()} 🚫 فوروارد پیام‌ها در این گروه مجاز نیست."
     }
 
     # بررسی اینکه آخرین پیام خطا چه زمانی ارسال شده
@@ -209,36 +215,4 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
     new_members = update.message.new_chat_members
 
     for member in new_members:
-        if member.is_bot:
-            adder_id = update.message.from_user.id
-
-            # بررسی اینکه کاربر اضافه‌کننده ادمین است یا نه
-            try:
-                adder_status = await context.bot.get_chat_member(chat_id, adder_id)
-                if adder_status.status not in ['creator', 'administrator']:
-                    # حذف ربات جدید
-                    try:
-                        await context.bot.ban_chat_member(chat_id, member.id)
-                        await context.bot.unban_chat_member(chat_id, member.id)
-
-                        # ارسال پیام خطا به کاربر
-                        violation_type = "add_bot"
-                        await handle_violation(update, context, violation_type)
-                    except Exception as e:
-                        logging.error(f"خطا در حذف ربات اضافه‌شده: {e}")
-            except Exception as e:
-                logging.error(f"خطا در بررسی وضعیت اضافه‌کننده: {e}")
-
-def main():
-    app = Application.builder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("unmute", lift_restriction))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, restrict_messages))
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
-
-    print("✅ ربات در حال اجرا است...")
-    app.run_polling()
-
-if __name__ == "__main__":
-    main()
+        if member
