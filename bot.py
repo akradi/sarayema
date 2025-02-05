@@ -79,25 +79,4 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
     chat_id = update.effective_chat.id
 
     violation_messages = {
-        "time": f"{update.effective_user.mention_html()} عزیز\n⏳ ارسال پیام در این گروه فقط از ساعت ۹ صبح تا ۹ شب به وقت تورنتو مجاز است.",
-        "message_limit": f"{update.effective_user.mention_html()} 🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!",
-        "muted": f"{update.effective_user.mention_html()} 🚫 به دلیل رعایت نکردن قوانین، شما تا\n{int(MUTE_DURATION.total_seconds() // 3600)} ساعت آینده نمی‌توانید پیام ارسال کنید.",
-        "add_bot": f"{update.effective_user.mention_html()} 🚫 فقط ادمین‌ها می‌توانند ربات اضافه کنند."
-    }
-
-    # بررسی اینکه آخرین پیام خطا چه زمانی ارسال شده
-    last_error_time = user_last_error.get(user_id)
-    time_since_last_error = (datetime.now() - last_error_time).total_seconds() if last_error_time else None
-
-    if not last_error_time or time_since_last_error > 30:
-        # ارسال پیام خطا به صورت سایلنت
-        try:
-            error_message = await context.bot.send_message(
-                chat_id=chat_id,
-                text=violation_messages[violation_type],
-                parse_mode="HTML",
-                disable_notification=True
-            )
-            # حذف پیام خطا بعد از 7 ثانیه
-            asyncio.create_task(delete_message_after_delay(error_message, 7))
-        except Exception as e:
+        "time": f"{update.effective_user.mention_html()} عزیز\n⏳ ارسال پیام در
