@@ -131,7 +131,7 @@ async def register_violation(update: Update, context: ContextTypes.DEFAULT_TYPE)
             try:
                 mute_message = await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"{update.effective_user.mention_html()} 🚫 به دلیل رعایت نکردن قوانین، شما تا {int(MUTE_DURATION.total_seconds() // 3600)} ساعت آینده نمی‌توانید پیام ارسال کنید.",
+                    text=f"{update.effective_user.mention_html()} 🚫 \nبه دلیل رعایت نکردن قوانین، شما تا {int(MUTE_DURATION.total_seconds() // 3600)} ساعت آینده\n نمی‌توانید پیام ارسال کنید.",
                     parse_mode="HTML",
                     disable_notification=True
                 )
