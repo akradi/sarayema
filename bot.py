@@ -96,8 +96,8 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
                 parse_mode="HTML",
                 disable_notification=True
             )
-            # حذف پیام خطا بعد از 10 ثانیه
-            asyncio.create_task(delete_message_after_delay(error_message, 10))
+            # حذف پیام خطا بعد از 7 ثانیه
+            asyncio.create_task(delete_message_after_delay(error_message, 7))
         except Exception as e:
             logging.error(f"خطا در ارسال پیام خطا: {e}")
 
@@ -135,8 +135,8 @@ async def register_violation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     parse_mode="HTML",
                     disable_notification=True
                 )
-                # حذف پیام اطلاع‌رسانی بعد از 10 ثانیه
-                asyncio.create_task(delete_message_after_delay(mute_message, 10))
+                # حذف پیام اطلاع‌رسانی بعد از 7 ثانیه
+                asyncio.create_task(delete_message_after_delay(mute_message, 7))
             except Exception as e:
                 logging.error(f"خطا در ارسال پیام بی‌صدا کردن: {e}")
         except Exception as e:
