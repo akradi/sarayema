@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.INFO)
 # 🔒 توکن ربات خود را در اینجا قرار دهید
 TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
+# دیکشنری‌های نگهدارنده وضعیت کاربران
 user_last_message = {}
 user_violations = {}
 user_last_error = {}
@@ -42,6 +43,7 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.forward_date:
         try:
             await update.message.delete()
+            logging.info(f"پیام فوروارد شده کاربر {user_id} حذف شد.")
         except Exception as e:
             logging.error(f"خطا در حذف پیام فوروارد شده: {e}")
         await handle_violation(update, context, violation_type="forward")
@@ -57,6 +59,7 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not (9 <= current_hour < 21):
         try:
             await update.message.delete()
+            logging.info(f"پیام کاربر {user_id} در ساعت نامجاز حذف شد.")
         except Exception as e:
             logging.error(f"خطا در حذف پیام کاربر: {e}")
         await handle_violation(update, context, violation_type="time")
@@ -66,14 +69,14 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id in user_last_message and user_last_message[user_id] == today:
         try:
             await update.message.delete()
+            logging.info(f"پیام دوم کاربر {user_id} در روز حذف شد.")
         except Exception as e:
             logging.error(f"خطا در حذف پیام کاربر: {e}")
         await handle_violation(update, context, violation_type="message_limit")
         return
 
-    # اگر همه شرایط رعایت شده، زمان آخرین پیام کاربر را ثبت می‌کنیم
+    # ثبت زمان آخرین پیام در صورت رعایت قوانین
     user_last_message[user_id] = today
-    # ریست کردن تعداد نقض‌های کاربر در صورت ارسال پیام مجاز
     user_violations[user_id] = 0
     user_last_error[user_id] = None
 
@@ -89,12 +92,11 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
         "add_bot": f"{update.effective_user.mention_html()} 🚫 فقط ادمین‌ها می‌توانند ربات اضافه کنند."
     }
 
-    # بررسی اینکه آخرین پیام خطا چه زمانی ارسال شده
+    # بررسی زمان ارسال آخرین پیام خطا (برای جلوگیری از اسپم)
     last_error_time = user_last_error.get(user_id)
     time_since_last_error = (datetime.now() - last_error_time).total_seconds() if last_error_time else None
 
     if not last_error_time or time_since_last_error > 30:
-        # ارسال پیام خطا به صورت سایلنت (بدون نوتیفیکیشن)
         try:
             error_message = await context.bot.send_message(
                 chat_id=chat_id,
@@ -102,26 +104,22 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
                 parse_mode="HTML",
                 disable_notification=True
             )
-            # حذف پیام خطا بعد از 7 ثانیه
             asyncio.create_task(delete_message_after_delay(error_message, 7))
         except Exception as e:
             logging.error(f"خطا در ارسال پیام خطا: {e}")
 
-        # به‌روزرسانی زمان آخرین پیام خطا
         user_last_error[user_id] = datetime.now()
 
-    # ثبت نقض کاربر
     await register_violation(update, context)
 
 async def register_violation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
 
-    # افزایش تعداد نقض‌های کاربر
     user_violations[user_id] = user_violations.get(user_id, 0) + 1
+    logging.info(f"کاربر {user_id} نقض شماره {user_violations[user_id]} را دارد.")
 
     if user_violations[user_id] >= MAX_VIOLATIONS:
-        # بی‌صدا کردن کاربر به مدت تعیین‌شده
         until_date = datetime.now() + MUTE_DURATION
         try:
             await context.bot.restrict_chat_member(
@@ -130,10 +128,8 @@ async def register_violation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 permissions=ChatPermissions(can_send_messages=False),
                 until_date=until_date
             )
-            # ذخیره اطلاعات کاربر بی‌صدا شده
             muted_users[user_id] = until_date
-
-            # ارسال پیام اطلاع‌رسانی به کاربر (سایلنت)
+            logging.info(f"کاربر {user_id} به مدت {MUTE_DURATION} بی‌صدا شد.")
             try:
                 mute_message = await context.bot.send_message(
                     chat_id=chat_id,
@@ -141,14 +137,12 @@ async def register_violation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                     parse_mode="HTML",
                     disable_notification=True
                 )
-                # حذف پیام اطلاع‌رسانی بعد از 7 ثانیه
                 asyncio.create_task(delete_message_after_delay(mute_message, 7))
             except Exception as e:
                 logging.error(f"خطا در ارسال پیام بی‌صدا کردن: {e}")
         except Exception as e:
             logging.error(f"خطا در بی‌صدا کردن کاربر: {e}")
 
-        # ریست کردن تعداد نقض‌های کاربر
         user_violations[user_id] = 0
         user_last_error[user_id] = None
 
@@ -159,17 +153,14 @@ async def delete_message_after_delay(message, delay):
     except Exception as e:
         logging.error(f"خطا در حذف پیام پس از تأخیر: {e}")
 
-# افزودن تابع لغو محدودیت
 async def lift_restriction(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
 
-    # بررسی اینکه کاربر استفاده‌کننده ادمین است یا نه
     user_status = await context.bot.get_chat_member(chat_id, update.effective_user.id)
     if user_status.status not in ['creator', 'administrator']:
         await update.message.reply_text("🚫 شما مجوز لازم برای لغو محدودیت کاربران را ندارید.")
         return
 
-    # دریافت شناسه کاربری که قرار است محدودیتش لغو شود
     if update.message.reply_to_message:
         user_id = update.message.reply_to_message.from_user.id
     elif context.args:
@@ -183,7 +174,6 @@ async def lift_restriction(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # تنظیم مجوزها
         permissions = ChatPermissions(
             can_send_messages=True,
             can_send_polls=True,
@@ -193,15 +183,12 @@ async def lift_restriction(update: Update, context: ContextTypes.DEFAULT_TYPE):
             can_change_info=False,
             can_pin_messages=False
         )
-
-        # لغو محدودیت کاربر
         await context.bot.restrict_chat_member(
             chat_id=chat_id,
             user_id=user_id,
             permissions=permissions
         )
 
-        # حذف کاربر از لیست بی‌صدا شده‌ها
         if user_id in muted_users:
             del muted_users[user_id]
 
@@ -209,7 +196,6 @@ async def lift_restriction(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ خطا در لغو محدودیت کاربر: {e}")
 
-# افزودن تابع برای جلوگیری از اضافه کردن ربات توسط کاربران غیر ادمین
 async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     new_members = update.message.new_chat_members
@@ -217,17 +203,12 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for member in new_members:
         if member.is_bot:
             adder_id = update.message.from_user.id
-
-            # بررسی اینکه کاربر اضافه‌کننده ادمین است یا نه
             try:
                 adder_status = await context.bot.get_chat_member(chat_id, adder_id)
                 if adder_status.status not in ['creator', 'administrator']:
-                    # حذف ربات جدید
                     try:
                         await context.bot.ban_chat_member(chat_id, member.id)
                         await context.bot.unban_chat_member(chat_id, member.id)
-
-                        # ارسال پیام خطا به کاربر
                         await handle_violation(update, context, violation_type="add_bot")
                     except Exception as e:
                         logging.error(f"خطا در حذف ربات اضافه‌شده: {e}")
@@ -243,7 +224,7 @@ def main():
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
 
-    print("✅ ربات در حال اجرا است...")
+    logging.info("✅ ربات در حال اجرا است...")
     app.run_polling()
 
 if __name__ == "__main__":
