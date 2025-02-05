@@ -217,4 +217,4 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
             adder_id = update.message.from_user.id
             # بررسی اینکه کاربر اضافه‌کننده ادمین است یا نه
             try:
-                adder_status = await context.bot.get_chat_member(chat_id, ad
+                adder_status = await context.bot.get_chat_member
