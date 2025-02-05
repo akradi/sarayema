@@ -186,7 +186,6 @@ async def lift_restriction(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # تنظیم مجوزها
         permissions = ChatPermissions(
             can_send_messages=True,
-            can_send_media_messages=True,
             can_send_polls=True,
             can_send_other_messages=True,
             can_add_web_page_previews=True,
@@ -218,35 +217,4 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
             adder_id = update.message.from_user.id
             # بررسی اینکه کاربر اضافه‌کننده ادمین است یا نه
             try:
-                adder_status = await context.bot.get_chat_member(chat_id, adder_id)
-                if adder_status.status not in ['creator', 'administrator']:
-                    # حذف ربات جدید
-                    try:
-                        await context.bot.ban_chat_member(chat_id, member.id)
-                        await context.bot.unban_chat_member(chat_id, member.id)
-                        # ارسال پیام خطا به کاربر
-                        violation_type = "add_bot"
-                        await handle_violation(update, context, violation_type)
-                    except Exception as e:
-                        logging.error(f"خطا در حذف ربات اضافه‌شده: {e}")
-            except Exception as e:
-                logging.error(f"خطا در بررسی وضعیت اضافه‌کننده: {e}")
-
-
-def main():
-    app = Application.builder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("unmute", lift_restriction))
-
-    # تغییر در فیلتر پیام‌ها برای اعمال محدودیت بر روی همه پیام‌ها
-    app.add_handler(MessageHandler(~filters.COMMAND, restrict_messages))
-
-    app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
-
-    print("✅ ربات در حال اجرا است...")
-    app.run_polling()
-
-
-if __name__ == "__main__":
-    main()
+                adder_status = await context.bot.get_chat_member(chat_id, ad
