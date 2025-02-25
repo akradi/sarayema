@@ -1,5 +1,7 @@
 from telegram import Update, ChatPermissions
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, ContextTypes, filters
+)
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
 import asyncio
@@ -8,10 +10,14 @@ import logging
 logging.basicConfig(level=logging.INFO)
 TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
+# لیست شناسه‌های کاربری مجاز (شناسه عددی تلگرام شما)
+AUTHORIZED_USERS = [27905383]  # شناسه عددی خود را جایگزین کنید
+
 user_last_message = {}
 user_violations = {}
 user_last_error = {}
 muted_users = {}
+group_chats = set()  # مجموعه‌ای از شناسه گروه‌هایی که ربات در آن‌ها عضو است
 
 MAX_VIOLATIONS = 3
 MUTE_DURATION = timedelta(hours=1)
@@ -24,6 +30,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+
+    # ذخیره شناسه گروه در مجموعه گروه‌ها
+    if update.effective_chat.type in ['group', 'supergroup']:
+        group_chats.add(chat_id)
+
     user_id = update.effective_user.id
 
     try:
@@ -205,12 +216,34 @@ def reset_violations(context: ContextTypes.DEFAULT_TYPE):
     user_violations.clear()
     logging.info("شمارش اخطارها ریست شد.")
 
+async def broadcast_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id not in AUTHORIZED_USERS:
+        await update.message.reply_text("🚫 شما مجوز لازم برای استفاده از این فرمان را ندارید.")
+        return
+
+    if not context.args:
+        await update.message.reply_text("❗ لطفاً پیام مورد نظر را پس از فرمان وارد کنید.")
+        return
+
+    message_text = ' '.join(context.args)
+
+    # ارسال پیام به تمامی گروه‌ها
+    for chat_id in group_chats:
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=message_text)
+        except Exception as e:
+            logging.error(f"خطا در ارسال پیام به گروه {chat_id}: {e}")
+
+    await update.message.reply_text("✅ پیام شما به تمام گروه‌ها ارسال شد.")
+
 def main():
     # ساخت Application با تنظیم JobQueue
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("unmute", lift_restriction))
+    app.add_handler(CommandHandler("broadcast", broadcast_message))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
 
