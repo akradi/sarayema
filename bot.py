@@ -37,10 +37,6 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type in ['group', 'supergroup']:
         group_chats.add(chat_id)
 
-    # اگر کاربر در لیست کاربران مجاز است، محدودیت‌ها را اعمال نکن
-    if user_id in AUTHORIZED_USERS:
-        return
-
     # بررسی اینکه آیا کاربر در لیست انتظار برای پخش پیام است یا خیر
     if user_id in pending_broadcast_users:
         # ارسال پیام دریافتی به تمام گروه‌ها
@@ -52,6 +48,10 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ پیام شما به تمام گروه‌ها ارسال شد.")
         pending_broadcast_users.remove(user_id)
         return  # ادامه ندهید
+
+    # اگر کاربر در لیست کاربران مجاز است، محدودیت‌ها را اعمال نکن
+    if user_id in AUTHORIZED_USERS:
+        return
 
     # بررسی وضعیت کاربر
     try:
