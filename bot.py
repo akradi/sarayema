@@ -8,9 +8,10 @@ from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
 import asyncio
 import logging
+import json
+import os
 
-# تنظیم سطح لاگینگ به DEBUG برای نمایش جزئیات بیشتر
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
 # لیست شناسه‌های کاربری مجاز (شناسه عددی تلگرام شما)
@@ -21,7 +22,6 @@ user_violations = {}
 user_last_error = {}
 muted_users = {}
 group_chats = {}  # دیکشنری از شناسهٔ گروه‌ها به نام آن‌ها
-pending_broadcast_users = {}  # دیکشنری از کاربران در حالت پخش و گروه‌های انتخابی آن‌ها
 
 MAX_VIOLATIONS = 3
 MUTE_DURATION = timedelta(hours=1)
@@ -29,32 +29,47 @@ MUTE_DURATION = timedelta(hours=1)
 # منطقه زمانی تورنتو
 toronto_tz = ZoneInfo('America/Toronto')
 
+GROUPS_FILE = 'groups.json'
+
+def load_groups():
+    global group_chats
+    if os.path.exists(GROUPS_FILE):
+        with open(GROUPS_FILE, 'r') as f:
+            group_chats = json.load(f)
+            # تبدیل کلیدها به اعداد صحیح
+            group_chats = {int(k): v for k, v in group_chats.items()}
+    else:
+        group_chats = {}
+
+def save_groups():
+    with open(GROUPS_FILE, 'w') as f:
+        json.dump(group_chats, f)
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("سلام! من مدیر گروه هستم 😎")
 
 async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global pending_broadcast_users
     chat = update.effective_chat
     chat_id = chat.id
     user_id = update.effective_user.id
 
     # ذخیره نام و شناسهٔ گروه در دیکشنری گروه‌ها
     if chat.type in ['group', 'supergroup']:
-        group_chats[chat_id] = chat.title
+        if chat_id not in group_chats:
+            group_chats[chat_id] = chat.title
+            save_groups()
 
-    # بررسی اینکه آیا کاربر در حالت انتخاب گروه‌ها برای پخش است
-    if user_id in pending_broadcast_users and pending_broadcast_users[user_id]['state'] == 'waiting_message':
-        logging.debug(f"User {user_id} is sending broadcast message.")
-        selected_chats = pending_broadcast_users[user_id]['selected_chats']
+    # بررسی اینکه آیا کاربر در حالت ارسال پیام برای پخش است
+    if 'broadcast' in context.user_data and context.user_data['broadcast']['state'] == 'waiting_message':
+        selected_chats = context.user_data['broadcast']['selected_chats']
         # ارسال پیام دریافتی به گروه‌های انتخاب‌شده
         for target_chat_id in selected_chats:
             try:
                 await update.message.copy(chat_id=target_chat_id)
-                logging.debug(f"Message sent to chat {target_chat_id}")
             except Exception as e:
                 logging.error(f"خطا در ارسال پیام به گروه {target_chat_id}: {e}")
         await update.message.reply_text("✅ پیام شما به گروه‌های انتخاب‌شده ارسال شد.")
-        del pending_broadcast_users[user_id]
+        del context.user_data['broadcast']
         return  # ادامه ندهید
 
     # اگر کاربر در لیست کاربران مجاز است، محدودیت‌ها را اعمال نکن
@@ -238,12 +253,29 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except Exception as e:
                 logging.error(f"خطا در بررسی وضعیت اضافه‌کننده: {e}")
 
+async def track_group_changes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    chat_id = chat.id
+
+    if update.my_chat_member:
+        new_status = update.my_chat_member.new_chat_member.status
+        if new_status in ['member', 'administrator']:
+            # ربات به گروه اضافه شده است
+            group_chats[chat_id] = chat.title
+            save_groups()
+            logging.info(f"Added to group {chat.title} (ID: {chat_id})")
+        elif new_status == 'left':
+            # ربات از گروه حذف شده است
+            if chat_id in group_chats:
+                del group_chats[chat_id]
+                save_groups()
+                logging.info(f"Removed from group {chat.title} (ID: {chat_id})")
+
 def reset_violations(context: ContextTypes.DEFAULT_TYPE):
     user_violations.clear()
     logging.info("شمارش اخطارها ریست شد.")
 
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global pending_broadcast_users
     user_id = update.effective_user.id
     if user_id not in AUTHORIZED_USERS:
         await update.message.reply_text("🚫 شما مجوز لازم برای استفاده از این فرمان را ندارید.")
@@ -261,50 +293,41 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard.append([InlineKeyboardButton("🔘 انتخاب همه", callback_data="select_all"), InlineKeyboardButton("⚪ لغو انتخاب همه", callback_data="deselect_all")])
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    pending_broadcast_users[user_id] = {
+    context.user_data['broadcast'] = {
         'state': 'selecting_chats',
         'selected_chats': set()
     }
-    logging.debug(f"User {user_id} started broadcast process.")
 
     await update.message.reply_text("لطفاً گروه‌های مورد نظر را انتخاب کنید:", reply_markup=reply_markup)
 
 async def broadcast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    global pending_broadcast_users
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
 
-    logging.debug(f"Callback received from user {user_id} with data {query.data}")
-
-    if user_id not in pending_broadcast_users:
+    if 'broadcast' not in context.user_data or context.user_data['broadcast']['state'] != 'selecting_chats':
         await query.edit_message_text("❗ زمان شما برای انتخاب گروه‌ها به پایان رسیده است.")
         return
 
     data = query.data
-    user_data = pending_broadcast_users[user_id]
+    user_data = context.user_data['broadcast']
 
     if data.startswith("toggle_"):
         chat_id = int(data.split("_")[1])
         if chat_id in user_data['selected_chats']:
             user_data['selected_chats'].remove(chat_id)
-            logging.debug(f"User {user_id} deselected chat {chat_id}")
         else:
             user_data['selected_chats'].add(chat_id)
-            logging.debug(f"User {user_id} selected chat {chat_id}")
     elif data == "select_all":
         user_data['selected_chats'] = set(group_chats.keys())
-        logging.debug(f"User {user_id} selected all chats")
     elif data == "deselect_all":
         user_data['selected_chats'].clear()
-        logging.debug(f"User {user_id} deselected all chats")
     elif data == "confirm":
         if not user_data['selected_chats']:
             await query.answer("❗ لطفاً حداقل یک گروه را انتخاب کنید.", show_alert=True)
             return
         user_data['state'] = 'waiting_message'
         await query.edit_message_text("✅ لطفاً پیام خود را ارسال کنید تا به گروه‌های انتخاب‌شده ارسال شود.")
-        logging.debug(f"User {user_id} confirmed selection and is now waiting for message.")
         return
 
     # به‌روزرسانی کلیدهای تعاملی با وضعیت انتخاب‌ها
@@ -323,6 +346,7 @@ async def broadcast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.edit_message_reply_markup(reply_markup=reply_markup)
 
 def main():
+    load_groups()
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -331,6 +355,7 @@ def main():
     app.add_handler(CallbackQueryHandler(broadcast_callback))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
+    app.add_handler(MessageHandler(filters.StatusUpdate.MY_CHAT_MEMBER, track_group_changes))
 
     # تنظیم منطقه زمانی
     toronto_tz = ZoneInfo('America/Toronto')
