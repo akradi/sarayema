@@ -6,7 +6,7 @@ import asyncio
 import logging
 
 logging.basicConfig(level=logging.INFO)
-TOKEN = "YOUR_TOKEN_HERE"
+TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
 user_last_message = {}
 user_violations = {}
