@@ -1,2 +1,4 @@
+firebase-admin
+pip install firebase-admin
 python-telegram-bot[job-queue]==20.3
 urllib3
