@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO)
 TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
 # لیست شناسه‌های کاربری مجاز (شناسه عددی تلگرام شما)
-AUTHORIZED_USERS = [27905383]  # شناسه عددی خود را جایگزین کنید
+AUTHORIZED_USERS = [27905383]  # شناسه عددی خود و کاربران دیگر را جایگزین کنید
 
 user_last_message = {}
 user_violations = {}
@@ -31,12 +31,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    user_id = update.effective_user.id
 
     # ذخیره شناسهٔ گروه در مجموعهٔ گروه‌ها
     if update.effective_chat.type in ['group', 'supergroup']:
         group_chats.add(chat_id)
 
-    user_id = update.effective_user.id
+    # اگر کاربر در لیست کاربران مجاز است، محدودیت‌ها را اعمال نکن
+    if user_id in AUTHORIZED_USERS:
+        return
 
     # بررسی اینکه آیا کاربر در لیست انتظار برای پخش پیام است یا خیر
     if user_id in pending_broadcast_users:
@@ -50,6 +53,7 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pending_broadcast_users.remove(user_id)
         return  # ادامه ندهید
 
+    # بررسی وضعیت کاربر
     try:
         chat_member = await context.bot.get_chat_member(chat_id, user_id)
         user_status = chat_member.status
@@ -57,6 +61,7 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"خطا در دریافت وضعیت کاربر: {e}")
         return
 
+    # اگر کاربر ادمین یا سازنده گروه است، محدودیت‌ها را اعمال نکن
     if user_status in ['creator', 'administrator']:
         return
 
