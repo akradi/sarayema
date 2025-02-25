@@ -6,7 +6,7 @@ import asyncio
 import logging
 
 logging.basicConfig(level=logging.INFO)
-TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
+TOKEN = "YOUR_TOKEN_HERE"
 
 user_last_message = {}
 user_violations = {}
@@ -206,7 +206,9 @@ def reset_violations(context: ContextTypes.DEFAULT_TYPE):
     logging.info("شمارش اخطارها ریست شد.")
 
 def main():
+    # ساخت Application با تنظیم JobQueue
     app = Application.builder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("unmute", lift_restriction))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
