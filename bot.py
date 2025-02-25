@@ -9,7 +9,8 @@ from zoneinfo import ZoneInfo
 import asyncio
 import logging
 
-logging.basicConfig(level=logging.INFO)
+# تنظیم سطح لاگینگ به DEBUG برای نمایش جزئیات بیشتر
+logging.basicConfig(level=logging.DEBUG)
 TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
 
 # لیست شناسه‌های کاربری مجاز (شناسه عددی تلگرام شما)
@@ -32,6 +33,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("سلام! من مدیر گروه هستم 😎")
 
 async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global pending_broadcast_users
     chat = update.effective_chat
     chat_id = chat.id
     user_id = update.effective_user.id
@@ -42,11 +44,13 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # بررسی اینکه آیا کاربر در حالت انتخاب گروه‌ها برای پخش است
     if user_id in pending_broadcast_users and pending_broadcast_users[user_id]['state'] == 'waiting_message':
+        logging.debug(f"User {user_id} is sending broadcast message.")
         selected_chats = pending_broadcast_users[user_id]['selected_chats']
         # ارسال پیام دریافتی به گروه‌های انتخاب‌شده
         for target_chat_id in selected_chats:
             try:
                 await update.message.copy(chat_id=target_chat_id)
+                logging.debug(f"Message sent to chat {target_chat_id}")
             except Exception as e:
                 logging.error(f"خطا در ارسال پیام به گروه {target_chat_id}: {e}")
         await update.message.reply_text("✅ پیام شما به گروه‌های انتخاب‌شده ارسال شد.")
@@ -261,6 +265,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'state': 'selecting_chats',
         'selected_chats': set()
     }
+    logging.debug(f"User {user_id} started broadcast process.")
 
     await update.message.reply_text("لطفاً گروه‌های مورد نظر را انتخاب کنید:", reply_markup=reply_markup)
 
@@ -269,6 +274,8 @@ async def broadcast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
+
+    logging.debug(f"Callback received from user {user_id} with data {query.data}")
 
     if user_id not in pending_broadcast_users:
         await query.edit_message_text("❗ زمان شما برای انتخاب گروه‌ها به پایان رسیده است.")
@@ -281,18 +288,23 @@ async def broadcast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         chat_id = int(data.split("_")[1])
         if chat_id in user_data['selected_chats']:
             user_data['selected_chats'].remove(chat_id)
+            logging.debug(f"User {user_id} deselected chat {chat_id}")
         else:
             user_data['selected_chats'].add(chat_id)
+            logging.debug(f"User {user_id} selected chat {chat_id}")
     elif data == "select_all":
         user_data['selected_chats'] = set(group_chats.keys())
+        logging.debug(f"User {user_id} selected all chats")
     elif data == "deselect_all":
         user_data['selected_chats'].clear()
+        logging.debug(f"User {user_id} deselected all chats")
     elif data == "confirm":
         if not user_data['selected_chats']:
             await query.answer("❗ لطفاً حداقل یک گروه را انتخاب کنید.", show_alert=True)
             return
         user_data['state'] = 'waiting_message'
         await query.edit_message_text("✅ لطفاً پیام خود را ارسال کنید تا به گروه‌های انتخاب‌شده ارسال شود.")
+        logging.debug(f"User {user_id} confirmed selection and is now waiting for message.")
         return
 
     # به‌روزرسانی کلیدهای تعاملی با وضعیت انتخاب‌ها
@@ -316,7 +328,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("unmute", lift_restriction))
     app.add_handler(CommandHandler("broadcast", broadcast_command))
-    app.add_handler(CallbackQueryHandler(broadcast_callback, pattern="^(toggle_|select_all|deselect_all|confirm)"))
+    app.add_handler(CallbackQueryHandler(broadcast_callback))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
 
