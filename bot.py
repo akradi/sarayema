@@ -239,6 +239,7 @@ def reset_violations(context: ContextTypes.DEFAULT_TYPE):
     logging.info("شمارش اخطارها ریست شد.")
 
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global pending_broadcast_users
     user_id = update.effective_user.id
     if user_id not in AUTHORIZED_USERS:
         await update.message.reply_text("🚫 شما مجوز لازم برای استفاده از این فرمان را ندارید.")
@@ -264,6 +265,7 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("لطفاً گروه‌های مورد نظر را انتخاب کنید:", reply_markup=reply_markup)
 
 async def broadcast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global pending_broadcast_users
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
@@ -309,13 +311,12 @@ async def broadcast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.edit_message_reply_markup(reply_markup=reply_markup)
 
 def main():
-    # ساخت Application با تنظیم JobQueue
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("unmute", lift_restriction))
     app.add_handler(CommandHandler("broadcast", broadcast_command))
-    app.add_handler(CallbackQueryHandler(broadcast_callback))
+    app.add_handler(CallbackQueryHandler(broadcast_callback, pattern="^(toggle_|select_all|deselect_all|confirm)"))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
 
