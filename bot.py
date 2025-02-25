@@ -35,7 +35,7 @@ toronto_tz = ZoneInfo('America/Toronto')
 firebase_credentials = os.getenv('FIREBASE_CREDENTIALS')
 cred = credentials.Certificate(json.loads(firebase_credentials))
 firebase_admin.initialize_app(cred, {
-    'databaseURL': 'https://your-project-id.firebaseio.com/'  # آدرس دیتابیس خود را وارد کنید
+    'databaseURL': 'https://sarayema-dfe31-default-rtdb.firebaseio.com'  # آدرس دیتابیس خود را وارد کنید
 })
 
 def save_group(chat_id, chat_title):
