@@ -1,6 +1,8 @@
-from telegram import Update, ChatPermissions
+from telegram import (
+    Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
+)
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler, ContextTypes, filters
+    Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
 )
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
@@ -17,8 +19,8 @@ user_last_message = {}
 user_violations = {}
 user_last_error = {}
 muted_users = {}
-group_chats = set()  # مجموعه‌ای از شناسهٔ گروه‌هایی که ربات در آن‌ها عضو است
-pending_broadcast_users = set()  # مجموعهٔ کاربرانی که در انتظار ارسال پیام برای پخش هستند
+group_chats = {}  # دیکشنری از شناسهٔ گروه‌ها به نام آن‌ها
+pending_broadcast_users = {}  # دیکشنری از کاربران در حالت پخش و گروه‌های انتخابی آن‌ها
 
 MAX_VIOLATIONS = 3
 MUTE_DURATION = timedelta(hours=1)
@@ -30,23 +32,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("سلام! من مدیر گروه هستم 😎")
 
 async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
+    chat = update.effective_chat
+    chat_id = chat.id
     user_id = update.effective_user.id
 
-    # ذخیره شناسهٔ گروه در مجموعهٔ گروه‌ها
-    if update.effective_chat.type in ['group', 'supergroup']:
-        group_chats.add(chat_id)
+    # ذخیره نام و شناسهٔ گروه در دیکشنری گروه‌ها
+    if chat.type in ['group', 'supergroup']:
+        group_chats[chat_id] = chat.title
 
-    # بررسی اینکه آیا کاربر در لیست انتظار برای پخش پیام است یا خیر
-    if user_id in pending_broadcast_users:
-        # ارسال پیام دریافتی به تمام گروه‌ها
-        for target_chat_id in group_chats:
+    # بررسی اینکه آیا کاربر در حالت انتخاب گروه‌ها برای پخش است
+    if user_id in pending_broadcast_users and pending_broadcast_users[user_id]['state'] == 'waiting_message':
+        selected_chats = pending_broadcast_users[user_id]['selected_chats']
+        # ارسال پیام دریافتی به گروه‌های انتخاب‌شده
+        for target_chat_id in selected_chats:
             try:
                 await update.message.copy(chat_id=target_chat_id)
             except Exception as e:
                 logging.error(f"خطا در ارسال پیام به گروه {target_chat_id}: {e}")
-        await update.message.reply_text("✅ پیام شما به تمام گروه‌ها ارسال شد.")
-        pending_broadcast_users.remove(user_id)
+        await update.message.reply_text("✅ پیام شما به گروه‌های انتخاب‌شده ارسال شد.")
+        del pending_broadcast_users[user_id]
         return  # ادامه ندهید
 
     # اگر کاربر در لیست کاربران مجاز است، محدودیت‌ها را اعمال نکن
@@ -240,8 +244,69 @@ async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🚫 شما مجوز لازم برای استفاده از این فرمان را ندارید.")
         return
 
-    pending_broadcast_users.add(user_id)
-    await update.message.reply_text("✅ لطفاً پیام خود را ارسال کنید تا به تمام گروه‌ها ارسال شود.")
+    if not group_chats:
+        await update.message.reply_text("❗ هیچ گروهی برای ارسال وجود ندارد.")
+        return
+
+    # ساختن کلیدهای تعاملی برای انتخاب گروه‌ها
+    keyboard = []
+    for chat_id, chat_title in group_chats.items():
+        keyboard.append([InlineKeyboardButton(chat_title, callback_data=f"toggle_{chat_id}")])
+    keyboard.append([InlineKeyboardButton("✅ ارسال به گروه‌های انتخاب‌شده", callback_data="confirm")])
+    keyboard.append([InlineKeyboardButton("🔘 انتخاب همه", callback_data="select_all"), InlineKeyboardButton("⚪ لغو انتخاب همه", callback_data="deselect_all")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    pending_broadcast_users[user_id] = {
+        'state': 'selecting_chats',
+        'selected_chats': set()
+    }
+
+    await update.message.reply_text("لطفاً گروه‌های مورد نظر را انتخاب کنید:", reply_markup=reply_markup)
+
+async def broadcast_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    if user_id not in pending_broadcast_users:
+        await query.edit_message_text("❗ زمان شما برای انتخاب گروه‌ها به پایان رسیده است.")
+        return
+
+    data = query.data
+    user_data = pending_broadcast_users[user_id]
+
+    if data.startswith("toggle_"):
+        chat_id = int(data.split("_")[1])
+        if chat_id in user_data['selected_chats']:
+            user_data['selected_chats'].remove(chat_id)
+        else:
+            user_data['selected_chats'].add(chat_id)
+    elif data == "select_all":
+        user_data['selected_chats'] = set(group_chats.keys())
+    elif data == "deselect_all":
+        user_data['selected_chats'].clear()
+    elif data == "confirm":
+        if not user_data['selected_chats']:
+            await query.answer("❗ لطفاً حداقل یک گروه را انتخاب کنید.", show_alert=True)
+            return
+        user_data['state'] = 'waiting_message'
+        await query.edit_message_text("✅ لطفاً پیام خود را ارسال کنید تا به گروه‌های انتخاب‌شده ارسال شود.")
+        return
+
+    # به‌روزرسانی کلیدهای تعاملی با وضعیت انتخاب‌ها
+    keyboard = []
+    for chat_id, chat_title in group_chats.items():
+        if chat_id in user_data['selected_chats']:
+            button_text = f"✅ {chat_title}"
+        else:
+            button_text = chat_title
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"toggle_{chat_id}")])
+
+    keyboard.append([InlineKeyboardButton("✅ ارسال به گروه‌های انتخاب‌شده", callback_data="confirm")])
+    keyboard.append([InlineKeyboardButton("🔘 انتخاب همه", callback_data="select_all"), InlineKeyboardButton("⚪ لغو انتخاب همه", callback_data="deselect_all")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.edit_message_reply_markup(reply_markup=reply_markup)
 
 def main():
     # ساخت Application با تنظیم JobQueue
@@ -250,6 +315,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("unmute", lift_restriction))
     app.add_handler(CommandHandler("broadcast", broadcast_command))
+    app.add_handler(CallbackQueryHandler(broadcast_callback))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
 
