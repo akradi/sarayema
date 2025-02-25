@@ -6,7 +6,7 @@ import asyncio
 import logging
 
 logging.basicConfig(level=logging.INFO)
-TOKEN = "7464967230:AAEyFh1o_whGxXCoKdZGrGKFDsvasK6n7-4"
+TOKEN = "YOUR_TOKEN_HERE"
 
 user_last_message = {}
 user_violations = {}
@@ -15,6 +15,9 @@ muted_users = {}
 
 MAX_VIOLATIONS = 3
 MUTE_DURATION = timedelta(hours=1)
+
+# منطقه زمانی تورنتو
+toronto_tz = ZoneInfo('America/Toronto')
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("سلام! من مدیر گروه هستم 😎")
@@ -33,7 +36,6 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_status in ['creator', 'administrator']:
         return
 
-    toronto_tz = ZoneInfo('America/Toronto')
     current_time = datetime.now(toronto_tz)
     current_hour = current_time.hour
     today = current_time.date()
@@ -46,7 +48,9 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await handle_violation(update, context, violation_type="time")
         return
 
-    if user_id in user_last_message and user_last_message[user_id] == today:
+    # بررسی تعداد پیام‌های ارسالی در روز
+    last_message_date = user_last_message.get(user_id)
+    if last_message_date == today:
         try:
             await update.message.delete()
         except Exception as e:
@@ -55,12 +59,14 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_last_message[user_id] = today
-    user_violations[user_id] = 0
+    user_violations[user_id] = (0, today)
     user_last_error[user_id] = None
 
 async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, violation_type):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
+    current_time = datetime.now(toronto_tz)
+    today = current_time.date()
 
     violation_messages = {
         "time": f"{update.effective_user.mention_html()} عزیز \n⏳ ارسال پیام در این گروه فقط از ساعت ۹ صبح تا ۹ شب به وقت تورنتو مجاز است.",
@@ -70,7 +76,7 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
     }
 
     last_error_time = user_last_error.get(user_id)
-    time_since_last_error = (datetime.now() - last_error_time).total_seconds() if last_error_time else None
+    time_since_last_error = (current_time - last_error_time).total_seconds() if last_error_time else None
 
     if not last_error_time or time_since_last_error > 30:
         try:
@@ -83,18 +89,28 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
             asyncio.create_task(delete_message_after_delay(error_message, 7))
         except Exception as e:
             logging.error(f"خطا در ارسال پیام خطا: {e}")
-        user_last_error[user_id] = datetime.now()
+        user_last_error[user_id] = current_time
 
-    await register_violation(update, context)
+    await register_violation(update, context, today)
 
-async def register_violation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def register_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, today):
     user_id = update.effective_user.id
     chat_id = update.effective_chat.id
 
-    user_violations[user_id] = user_violations.get(user_id, 0) + 1
+    violations_info = user_violations.get(user_id, (0, today))
+    violations, last_violation_date = violations_info
 
-    if user_violations[user_id] >= MAX_VIOLATIONS:
-        until_date = datetime.now() + MUTE_DURATION
+    if last_violation_date != today:
+        # اگر روز جدید است، شمارش اخطارها را ریست کن
+        violations = 1
+        last_violation_date = today
+    else:
+        violations += 1
+
+    user_violations[user_id] = (violations, last_violation_date)
+
+    if violations >= MAX_VIOLATIONS:
+        until_date = datetime.now(toronto_tz) + MUTE_DURATION
         try:
             await context.bot.restrict_chat_member(
                 chat_id=chat_id,
@@ -115,7 +131,8 @@ async def register_violation(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 logging.error(f"خطا در ارسال پیام بی‌صدا کردن: {e}")
         except Exception as e:
             logging.error(f"خطا در بی‌صدا کردن کاربر: {e}")
-        user_violations[user_id] = 0
+        # پس از مسدودسازی، شمارش اخطارها را ریست کن
+        user_violations[user_id] = (0, today)
         user_last_error[user_id] = None
 
 async def delete_message_after_delay(message, delay):
@@ -184,12 +201,25 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except Exception as e:
                 logging.error(f"خطا در بررسی وضعیت اضافه‌کننده: {e}")
 
+# تابع زمان‌بندی شده برای ریست کردن شمارش اخطارها (اختیاری)
+async def reset_violations():
+    while True:
+        now = datetime.now(toronto_tz)
+        next_reset = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        sleep_seconds = (next_reset - now).total_seconds()
+        await asyncio.sleep(sleep_seconds)
+        user_violations.clear()
+        logging.info("شمارش اخطارها ریست شد.")
+
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("unmute", lift_restriction))
-    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))  # تغییر در این خط
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
+
+    # شروع تابع زمان‌بندی شده برای ریست کردن شمارش اخطارها
+    asyncio.create_task(reset_violations())
 
     print("✅ ربات در حال اجرا است...")
     app.run_polling()
