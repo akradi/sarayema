@@ -1,6 +1,6 @@
 from telegram import Update, ChatPermissions
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
 import asyncio
 import logging
@@ -71,7 +71,7 @@ async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, v
     violation_messages = {
         "time": f"{update.effective_user.mention_html()} عزیز \n⏳ ارسال پیام در این گروه فقط از ساعت ۹ صبح تا ۹ شب به وقت تورنتو مجاز است.",
         "message_limit": f"{update.effective_user.mention_html()} 🚫 شما فقط یک بار در روز می‌توانید پیام بفرستید!",
-        "muted": f"{update.effective_user.mention_html()} 🚫 به دلیل رعایت نکردن قوانین، شما تا\n  {int(MUTE_DURATION.total_seconds() // 3600)} ساعت آینده\n نمی‌توانید پیام ارسال کنید .",
+        "muted": f"{update.effective_user.mention_html()} 🚫 به دلیل رعایت نکردن قوانین، شما تا\n {int(MUTE_DURATION.total_seconds() // 3600)} ساعت آینده\n نمی‌توانید پیام ارسال کنید.",
         "add_bot": f"{update.effective_user.mention_html()} 🚫 فقط ادمین‌ها می‌توانند ربات اضافه کنند."
     }
 
@@ -201,15 +201,9 @@ async def check_bot_addition(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except Exception as e:
                 logging.error(f"خطا در بررسی وضعیت اضافه‌کننده: {e}")
 
-# تابع زمان‌بندی شده برای ریست کردن شمارش اخطارها (اختیاری)
-async def reset_violations():
-    while True:
-        now = datetime.now(toronto_tz)
-        next_reset = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        sleep_seconds = (next_reset - now).total_seconds()
-        await asyncio.sleep(sleep_seconds)
-        user_violations.clear()
-        logging.info("شمارش اخطارها ریست شد.")
+def reset_violations(context: ContextTypes.DEFAULT_TYPE):
+    user_violations.clear()
+    logging.info("شمارش اخطارها ریست شد.")
 
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -218,8 +212,14 @@ def main():
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
 
-    # شروع تابع زمان‌بندی شده برای ریست کردن شمارش اخطارها
-    asyncio.create_task(reset_violations())
+    # تنظیم منطقه زمانی
+    toronto_tz = ZoneInfo('America/Toronto')
+
+    # زمان ریست: ساعت 00:00 به وقت تورنتو
+    reset_time = time(hour=0, minute=0, tzinfo=toronto_tz)
+
+    # افزودن وظیفه زمان‌بندی‌شده
+    app.job_queue.run_daily(reset_violations, time=reset_time)
 
     print("✅ ربات در حال اجرا است...")
     app.run_polling()
