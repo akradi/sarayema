@@ -2,7 +2,7 @@ from telegram import (
     Update, ChatPermissions, InlineKeyboardButton, InlineKeyboardMarkup
 )
 from telegram.ext import (
-    Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler
+    Application, CommandHandler, MessageHandler, ContextTypes, filters, CallbackQueryHandler, ChatMemberHandler
 )
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
@@ -257,19 +257,19 @@ async def track_group_changes(update: Update, context: ContextTypes.DEFAULT_TYPE
     chat = update.effective_chat
     chat_id = chat.id
 
-    if update.my_chat_member:
-        new_status = update.my_chat_member.new_chat_member.status
-        if new_status in ['member', 'administrator']:
-            # ربات به گروه اضافه شده است
-            group_chats[chat_id] = chat.title
+    new_status = update.my_chat_member.new_chat_member.status
+
+    if new_status in ['member', 'administrator']:
+        # ربات به گروه اضافه شده است
+        group_chats[chat_id] = chat.title
+        save_groups()
+        logging.info(f"Added to group {chat.title} (ID: {chat_id})")
+    elif new_status in ['kicked', 'left']:
+        # ربات از گروه حذف شده است
+        if chat_id in group_chats:
+            del group_chats[chat_id]
             save_groups()
-            logging.info(f"Added to group {chat.title} (ID: {chat_id})")
-        elif new_status == 'left':
-            # ربات از گروه حذف شده است
-            if chat_id in group_chats:
-                del group_chats[chat_id]
-                save_groups()
-                logging.info(f"Removed from group {chat.title} (ID: {chat_id})")
+            logging.info(f"Removed from group {chat.title} (ID: {chat_id})")
 
 def reset_violations(context: ContextTypes.DEFAULT_TYPE):
     user_violations.clear()
@@ -355,7 +355,7 @@ def main():
     app.add_handler(CallbackQueryHandler(broadcast_callback))
     app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, restrict_messages))
     app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, check_bot_addition))
-    app.add_handler(MessageHandler(filters.StatusUpdate.MY_CHAT_MEMBER, track_group_changes))
+    app.add_handler(ChatMemberHandler(track_group_changes, ChatMemberHandler.MY_CHAT_MEMBER))
 
     # تنظیم منطقه زمانی
     toronto_tz = ZoneInfo('America/Toronto')
