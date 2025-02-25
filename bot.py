@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO)
 TOKEN = os.getenv("TOKEN")
 
 # لیست شناسه‌های کاربری مجاز (شناسه عددی تلگرام شما)
-AUTHORIZED_USERS = [27905383]  # شناسه عددی خود و کاربران دیگر را جایگزین کنید
+AUTHORIZED_USERS = [27905383,111420866]  # شناسه عددی خود و کاربران دیگر را جایگزین کنید
 
 user_last_message = {}
 user_violations = {}
