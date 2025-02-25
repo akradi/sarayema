@@ -59,60 +59,63 @@ async def restrict_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
             group_chats[chat_id] = chat.title
             save_groups()
 
-    # بررسی اینکه آیا کاربر در حالت ارسال پیام برای پخش است
-    if 'broadcast' in context.user_data and context.user_data['broadcast']['state'] == 'waiting_message':
-        selected_chats = context.user_data['broadcast']['selected_chats']
-        # ارسال پیام دریافتی به گروه‌های انتخاب‌شده
-        for target_chat_id in selected_chats:
+    # اگر چت خصوصی است و کاربر در حالت پخش پیام است
+    if chat.type == 'private':
+        if 'broadcast' in context.user_data and context.user_data['broadcast']['state'] == 'waiting_message':
+            selected_chats = context.user_data['broadcast']['selected_chats']
+            # ارسال پیام دریافتی به گروه‌های انتخاب‌شده
+            for target_chat_id in selected_chats:
+                try:
+                    await update.message.copy(chat_id=target_chat_id)
+                except Exception as e:
+                    logging.error(f"خطا در ارسال پیام به گروه {target_chat_id}: {e}")
+            await update.message.reply_text("✅ پیام شما به گروه‌های انتخاب‌شده ارسال شد.")
+            del context.user_data['broadcast']
+            return  # ادامه ندهید
+
+    # ادامهٔ محدودیت‌ها برای پیام‌های ارسال‌شده در گروه‌ها
+    if chat.type in ['group', 'supergroup']:
+        # اگر کاربر در لیست کاربران مجاز است، محدودیت‌ها را اعمال نکن
+        if user_id in AUTHORIZED_USERS:
+            return
+
+        # بررسی وضعیت کاربر
+        try:
+            chat_member = await context.bot.get_chat_member(chat_id, user_id)
+            user_status = chat_member.status
+        except Exception as e:
+            logging.error(f"خطا در دریافت وضعیت کاربر: {e}")
+            return
+
+        # اگر کاربر ادمین یا سازنده گروه است، محدودیت‌ها را اعمال نکن
+        if user_status in ['creator', 'administrator']:
+            return
+
+        current_time = datetime.now(toronto_tz)
+        current_hour = current_time.hour
+        today = current_time.date()
+
+        if not (9 <= current_hour < 21):
             try:
-                await update.message.copy(chat_id=target_chat_id)
+                await update.message.delete()
             except Exception as e:
-                logging.error(f"خطا در ارسال پیام به گروه {target_chat_id}: {e}")
-        await update.message.reply_text("✅ پیام شما به گروه‌های انتخاب‌شده ارسال شد.")
-        del context.user_data['broadcast']
-        return  # ادامه ندهید
+                logging.error(f"خطا در حذف پیام کاربر: {e}")
+            await handle_violation(update, context, violation_type="time")
+            return
 
-    # اگر کاربر در لیست کاربران مجاز است، محدودیت‌ها را اعمال نکن
-    if user_id in AUTHORIZED_USERS:
-        return
+        # بررسی تعداد پیام‌های ارسالی در روز
+        last_message_date = user_last_message.get(user_id)
+        if last_message_date == today:
+            try:
+                await update.message.delete()
+            except Exception as e:
+                logging.error(f"خطا در حذف پیام کاربر: {e}")
+            await handle_violation(update, context, violation_type="message_limit")
+            return
 
-    # بررسی وضعیت کاربر
-    try:
-        chat_member = await context.bot.get_chat_member(chat_id, user_id)
-        user_status = chat_member.status
-    except Exception as e:
-        logging.error(f"خطا در دریافت وضعیت کاربر: {e}")
-        return
-
-    # اگر کاربر ادمین یا سازنده گروه است، محدودیت‌ها را اعمال نکن
-    if user_status in ['creator', 'administrator']:
-        return
-
-    current_time = datetime.now(toronto_tz)
-    current_hour = current_time.hour
-    today = current_time.date()
-
-    if not (9 <= current_hour < 21):
-        try:
-            await update.message.delete()
-        except Exception as e:
-            logging.error(f"خطا در حذف پیام کاربر: {e}")
-        await handle_violation(update, context, violation_type="time")
-        return
-
-    # بررسی تعداد پیام‌های ارسالی در روز
-    last_message_date = user_last_message.get(user_id)
-    if last_message_date == today:
-        try:
-            await update.message.delete()
-        except Exception as e:
-            logging.error(f"خطا در حذف پیام کاربر: {e}")
-        await handle_violation(update, context, violation_type="message_limit")
-        return
-
-    user_last_message[user_id] = today
-    user_violations[user_id] = (0, today)
-    user_last_error[user_id] = None
+        user_last_message[user_id] = today
+        user_violations[user_id] = (0, today)
+        user_last_error[user_id] = None
 
 async def handle_violation(update: Update, context: ContextTypes.DEFAULT_TYPE, violation_type):
     user_id = update.effective_user.id
@@ -276,6 +279,10 @@ def reset_violations(context: ContextTypes.DEFAULT_TYPE):
     logging.info("شمارش اخطارها ریست شد.")
 
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != 'private':
+        await update.message.reply_text("❗ لطفاً این فرمان را در چت خصوصی با من ارسال کنید.")
+        return
+
     user_id = update.effective_user.id
     if user_id not in AUTHORIZED_USERS:
         await update.message.reply_text("🚫 شما مجوز لازم برای استفاده از این فرمان را ندارید.")
